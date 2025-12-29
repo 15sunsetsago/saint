@@ -17,7 +17,7 @@
 
 #define BUFFER_SIZE 1024 /* Pending Change */
 
-const int server_port = 4433;
+const int server_port = 443;
 
 static volatile bool server_running = true;
 
@@ -30,7 +30,7 @@ static volatile bool server_running = true;
     -   Implement best practices from IBM Docs
     -   Create daemon for static site updating
         -   Update Makefile for options for compiling daemon or server
-    -   Get certificate for aswium.com domain
+    -   Get certificate for aswium.com domain [X]
     -   Get a VPS and setup DNS in CloudFlare
 */
 
@@ -94,13 +94,14 @@ static SSL_CTX *create_context()
 
 static void configure_server_context(SSL_CTX *ctx)
 {
-    if (SSL_CTX_use_certificate_chain_file(ctx, "cert.pem") <= 0)
+    /* Migrate from using self-signed certs to official CA */
+    if (SSL_CTX_use_certificate_chain_file(ctx, "/etc/letsencrypt/live/aswium.com/fullchain.pem") <= 0)
     { 
         ERR_print_errors_fp(stderr);
         exit(EXIT_FAILURE);
     }
 
-    if (SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM) <= 0)
+    if (SSL_CTX_use_PrivateKey_file(ctx, "/etc/letsencrypt/live/aswium.com/privkey.pem", SSL_FILETYPE_PEM) <= 0)
     {
         ERR_print_errors_fp(stderr);
         exit(EXIT_FAILURE);
@@ -190,8 +191,25 @@ int main()
                 /* Show received message */
                 printf("Received: %s", rxbuf);
 
-                /* Echo it back */
-                if (SSL_write(ssl, rxbuf, rxlen) <= 0) 
+                /* Form Hello World Text*/
+                char test_buf[2048];
+                int test_len;
+
+                char *msg = "Hello, World!";
+
+                test_len = snprintf(test_buf, sizeof(test_buf),
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: text/plain\r\n"
+                    "Content-Length: %d\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                    "%s",
+                    (int) strlen(msg),
+                    msg
+                );
+
+                /* Return Hello World */
+                if (SSL_write(ssl, test_buf, test_len) <= 0) 
                 {
                     ERR_print_errors_fp(stderr);
                 }
